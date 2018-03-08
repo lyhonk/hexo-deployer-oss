@@ -1,0 +1,15 @@
+{
+  "name": "hexo-deployer-oss",
+  "version": "1.0.0",
+  "description": "Hexo plugin of aliyun oss",
+  "main": "index.js",
+  "scripts": {},
+  "author": "guyi-maple",
+  "license": "ISC",
+  "devDependencies": {},
+  "keywords":["Hexo"],
+  "dependencies": {
+    "ali-oss": "^4.13.0",
+    "co": "^4.6.0"
+  }
+}
