@@ -4,14 +4,6 @@ const co = require('co')
 const crypto = require('crypto')
 const path = require('path')
 
-
-function getUploadPath(absPath, root) {
-    let pathArr = absPath.split(path.sep);
-    let rootIndex = pathArr.indexOf(root);
-    pathArr = pathArr.slice(rootIndex + 1);
-    return pathArr.join('/');
-}
-
 class OSSMain {
 
     state = {
@@ -30,21 +22,43 @@ class OSSMain {
     //开始提交操作
     start = () =>{
         if(this.checkConfig()){
+            //创建OSS Client 对象
             this.state.client = new OSS({
                 region: this.state.config.region,
                 accessKeyId: this.state.config.accessKeyId,
                 accessKeySecret: this.state.config.accessKeySecret,
                 bucket: this.state.config.bucket
             });
+
+            //下载OSS中文件MD5列表
             this.downloadFile('file.md5.map',result=>{
                 var ossMap = {};
                 if(result){
                     ossMap = JSON.parse(result.content.toString())
                 }
-                console.info(ossMap)
 
-                this.filesMD5(this.localFiels(),(md5)=>{
-                    console.info(md5)
+                //获取本地文件列表
+                var files = this.localFiels()
+                var index = 0
+                var localMD5Map = {}
+                files.map(file=>{
+
+                    //获取本地文件MD5
+                    this.getFileMD5(file,(md5)=>{
+                        localMD5Map[file] = md5
+                        index++
+
+                        //如果OSS中不存在此文件 或者 文件MD5不相同
+                        if(!ossMap[file] || ossMap[file] != md5){
+                            this.uploadFile(file)
+                        }
+
+                        //判断本地文件MD5信息是否全部生成
+                        if(index >= files.length){
+                            //上传本地文件MD5列表
+                            this.uploadFileContent('file.md5.map',JSON.stringify(localMD5Map))
+                        }
+                    })
                 })
             })
         }
@@ -88,18 +102,9 @@ class OSSMain {
         });
     }
 
-    filesMD5 = (files,callback,index,md5) =>{
-        if(!index){
-            index = -1
-        }
-
-        if(index >= files.length){
-            callback(md5)
-            return
-        }
-        index = index + 1
-
-        var stream = fs.createReadStream(path.join(this.state.publicDir,files[index]))
+    //获取文件MD5
+    getFileMD5 = (file,callback) =>{
+        var stream = fs.createReadStream(path.join(this.state.publicDir,file))
         var fsHash = crypto.createHash('md5');
         stream.on('data',d=>{
             fsHash.update(d);
@@ -107,10 +112,30 @@ class OSSMain {
 
         stream.on('end',()=>{
             var value = fsHash.digest('hex');
-            if(!md5) md5 = {}
-            md5[files[index]] = value
-            console.info(files[index],index,value)
-            this.filesMD5(files,callback,index,md5)
+            callback(value)
+        });
+    }
+
+    uploadFile = (file) =>{
+        var client = this.state.client
+        var log = this.state.log
+        var dir = this.state.publicDir
+        co(function* () {
+            yield client.put(file, path.join(dir,file))
+            log.info('upload',file,'ok')
+        }).catch(function (err) {
+            log.error(err);
+        });
+    }
+
+    uploadFileContent = (key,content) =>{
+        var client = this.state.client
+        var log = this.state.log
+        co(function* () {
+            yield client.put(key, new Buffer(content));
+            log.info('upload',key,'ok');
+        }).catch(function (err) {
+            log.error(err);
         });
     }
 

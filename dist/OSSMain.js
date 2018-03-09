@@ -4,6 +4,10 @@ var _regenerator = require('babel-runtime/regenerator');
 
 var _regenerator2 = _interopRequireDefault(_regenerator);
 
+var _stringify = require('babel-runtime/core-js/json/stringify');
+
+var _stringify2 = _interopRequireDefault(_stringify);
+
 var _classCallCheck2 = require('babel-runtime/helpers/classCallCheck');
 
 var _classCallCheck3 = _interopRequireDefault(_classCallCheck2);
@@ -24,9 +28,33 @@ function getUploadPath(absPath, root) {
 }
 
 var OSSMain = function OSSMain(config, log, publicDir) {
+    (0, _classCallCheck3.default)(this, OSSMain);
+
+    _initialiseProps.call(this);
+
+    this.state.config = config;
+    this.state.log = log;
+    this.state.publicDir = publicDir;
+}
+
+//开始提交操作
+
+
+//检查配置信息
+
+
+//获取本地待上传文件
+
+
+//下载文件
+
+
+//获取文件MD5
+;
+
+var _initialiseProps = function _initialiseProps() {
     var _this = this;
 
-    (0, _classCallCheck3.default)(this, OSSMain);
     this.state = {
         log: null,
         publicDir: null,
@@ -47,10 +75,23 @@ var OSSMain = function OSSMain(config, log, publicDir) {
                 if (result) {
                     ossMap = JSON.parse(result.content.toString());
                 }
-                console.info(ossMap);
 
-                _this.filesMD5(_this.localFiels(), function (md5) {
-                    console.info(md5);
+                var files = _this.localFiels();
+                var index = 0;
+                var localMD5Map = {};
+                files.map(function (file) {
+                    _this.getFileMD5(file, function (md5) {
+                        localMD5Map[file] = md5;
+                        index++;
+
+                        if (!ossMap[file] || ossMap[file] != md5) {
+                            _this.uploadFile(file);
+                        }
+
+                        if (index >= files.length) {
+                            _this.uploadFileContent('file.md5.map', (0, _stringify2.default)(localMD5Map));
+                        }
+                    });
                 });
             });
         }
@@ -98,18 +139,8 @@ var OSSMain = function OSSMain(config, log, publicDir) {
         });
     };
 
-    this.filesMD5 = function (files, callback, index, md5) {
-        if (!index) {
-            index = -1;
-        }
-
-        if (index >= files.length) {
-            callback(md5);
-            return;
-        }
-        index = index + 1;
-
-        var stream = fs.createReadStream(path.join(_this.state.publicDir, files[index]));
+    this.getFileMD5 = function (file, callback) {
+        var stream = fs.createReadStream(path.join(_this.state.publicDir, file));
         var fsHash = crypto.createHash('md5');
         stream.on('data', function (d) {
             fsHash.update(d);
@@ -117,29 +148,61 @@ var OSSMain = function OSSMain(config, log, publicDir) {
 
         stream.on('end', function () {
             var value = fsHash.digest('hex');
-            if (!md5) md5 = {};
-            md5[files[index]] = value;
-            console.info(files[index], index, value);
-            _this.filesMD5(files, callback, index, md5);
+            callback(value);
         });
     };
 
-    this.state.config = config;
-    this.state.log = log;
-    this.state.publicDir = publicDir;
-}
+    this.uploadFile = function (file) {
+        var client = _this.state.client;
+        var log = _this.state.log;
+        var dir = _this.state.publicDir;
+        co( /*#__PURE__*/_regenerator2.default.mark(function _callee2() {
+            return _regenerator2.default.wrap(function _callee2$(_context2) {
+                while (1) {
+                    switch (_context2.prev = _context2.next) {
+                        case 0:
+                            _context2.next = 2;
+                            return client.put(file, path.join(dir, file));
 
-//开始提交操作
+                        case 2:
+                            log.info('upload', file, 'ok');
 
+                        case 3:
+                        case 'end':
+                            return _context2.stop();
+                    }
+                }
+            }, _callee2, this);
+        })).catch(function (err) {
+            log.error(err);
+        });
+    };
 
-//检查配置信息
+    this.uploadFileContent = function (key, content) {
+        var client = _this.state.client;
+        var log = _this.state.log;
+        co( /*#__PURE__*/_regenerator2.default.mark(function _callee3() {
+            return _regenerator2.default.wrap(function _callee3$(_context3) {
+                while (1) {
+                    switch (_context3.prev = _context3.next) {
+                        case 0:
+                            _context3.next = 2;
+                            return client.put(key, new Buffer(content));
 
+                        case 2:
+                            log.info('upload', key, 'ok');
 
-//获取本地待上传文件
-
-
-//下载文件
-;
+                        case 3:
+                        case 'end':
+                            return _context3.stop();
+                    }
+                }
+            }, _callee3, this);
+        })).catch(function (err) {
+            log.error(err);
+        });
+    };
+};
 
 module.exports = function (args) {
     new OSSMain(args, this.log, this.public_dir).start();
