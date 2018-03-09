@@ -20,13 +20,6 @@ var co = require('co');
 var crypto = require('crypto');
 var path = require('path');
 
-function getUploadPath(absPath, root) {
-    var pathArr = absPath.split(path.sep);
-    var rootIndex = pathArr.indexOf(root);
-    pathArr = pathArr.slice(rootIndex + 1);
-    return pathArr.join('/');
-}
-
 var OSSMain = function OSSMain(config, log, publicDir) {
     (0, _classCallCheck3.default)(this, OSSMain);
 
@@ -64,31 +57,40 @@ var _initialiseProps = function _initialiseProps() {
 
     this.start = function () {
         if (_this.checkConfig()) {
+            //创建OSS Client 对象
             _this.state.client = new OSS({
                 region: _this.state.config.region,
                 accessKeyId: _this.state.config.accessKeyId,
                 accessKeySecret: _this.state.config.accessKeySecret,
                 bucket: _this.state.config.bucket
             });
+
+            //下载OSS中文件MD5列表
             _this.downloadFile('file.md5.map', function (result) {
                 var ossMap = {};
                 if (result) {
                     ossMap = JSON.parse(result.content.toString());
                 }
 
+                //获取本地文件列表
                 var files = _this.localFiels();
                 var index = 0;
                 var localMD5Map = {};
                 files.map(function (file) {
+
+                    //获取本地文件MD5
                     _this.getFileMD5(file, function (md5) {
                         localMD5Map[file] = md5;
                         index++;
 
+                        //如果OSS中不存在此文件 或者 文件MD5不相同
                         if (!ossMap[file] || ossMap[file] != md5) {
                             _this.uploadFile(file);
                         }
 
+                        //判断本地文件MD5信息是否全部生成
                         if (index >= files.length) {
+                            //上传本地文件MD5列表
                             _this.uploadFileContent('file.md5.map', (0, _stringify2.default)(localMD5Map));
                         }
                     });
